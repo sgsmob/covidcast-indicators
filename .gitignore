@@ -123,3 +123,6 @@ venv.bak/
 .retry
 .indicators-ansible-vault-pass
 indicators-ansible-vault-pass
+
+# vscode settings
+.vscode/
