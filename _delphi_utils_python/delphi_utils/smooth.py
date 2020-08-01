@@ -57,7 +57,7 @@ class Smoother:
         impute=True,
         minval=None,
         poly_fit_degree=3,
-        boundary_method='identity'
+        boundary_method="identity",
     ):
         self.method_name = method_name
         self.window_length = window_length
@@ -67,9 +67,9 @@ class Smoother:
         self.poly_fit_degree = poly_fit_degree
         self.boundary_method = boundary_method
         if method_name == "savgol":
-                self.coeffs = self.causal_savgol_coeffs(
-                    -self.window_length+1, 0, self.poly_fit_degree
-                )
+            self.coeffs = self.causal_savgol_coeffs(
+                -self.window_length + 1, 0, self.poly_fit_degree
+            )
         else:
             self.coeffs = None
 
@@ -80,10 +80,14 @@ class Smoother:
 
     def smooth(self, signal):
         if self.impute:
-            signal = self.impute_with_savgol(signal, self.window_length, self.poly_fit_degree)
+            signal = self.impute_with_savgol(
+                signal, self.window_length, self.poly_fit_degree
+            )
 
         if self.method_name == "savgol":
-            signal_smoothed = self.pad_and_convolve(signal, self.coeffs, self.boundary_method)
+            signal_smoothed = self.pad_and_convolve(
+                signal, self.coeffs, self.boundary_method
+            )
             return signal_smoothed
 
         elif self.method_name == "local_linear":
@@ -96,7 +100,9 @@ class Smoother:
             signal_smoothed = self.moving_average_smoother(signal, self.window_length)
             return signal_smoothed
 
-    def moving_average_smoother(self, signal: np.ndarray, window_length=14) -> np.ndarray:
+    def moving_average_smoother(
+        self, signal: np.ndarray, window_length=14
+    ) -> np.ndarray:
         """
         Compute a moving average on signal.
 
@@ -123,11 +129,7 @@ class Smoother:
         return signal_smoothed
 
     def left_gauss_linear_smoother(
-        self,
-        signal: np.ndarray,
-        gaussian_bandwidth=10,
-        impute=False,
-        minval=None,
+        self, signal: np.ndarray, gaussian_bandwidth=10, impute=False, minval=None,
     ) -> np.ndarray:
         """
         Smooth the y-values using a local linear regression with Gaussian weights.
@@ -157,7 +159,9 @@ class Smoother:
         for idx in range(n):
             weights = np.exp(-((np.arange(idx + 1) - idx) ** 2) / gaussian_bandwidth)
             AwA = np.dot(A[: (idx + 1), :].T * weights, A[: (idx + 1), :])
-            Awy = np.dot(A[: (idx + 1), :].T * weights, signal[: (idx + 1)].reshape(-1, 1))
+            Awy = np.dot(
+                A[: (idx + 1), :].T * weights, signal[: (idx + 1)].reshape(-1, 1)
+            )
             try:
                 beta = np.linalg.solve(AwA, Awy)
                 signal_smoothed[idx] = np.dot(A[: (idx + 1), :], beta)[-1]
@@ -212,7 +216,7 @@ class Smoother:
             coeffs[i] = (mat_inverse @ basis_vector)[0]
         return coeffs
 
-    def pad_and_convolve(self, signal, coeffs, boundary_method='identity'):
+    def pad_and_convolve(self, signal, coeffs, boundary_method="identity"):
         """
         Returns a specific type of convolution of the 1D signal with the 1D signal
         coeffs, respecting boundary effects. That is, the output y is
@@ -240,18 +244,20 @@ class Smoother:
         """
 
         # reverse because np.convolve reverses the second argument
-        temp_reversed_coeffs = np.array(
-                list(reversed(coeffs))
-            )  
+        temp_reversed_coeffs = np.array(list(reversed(coeffs)))
         if boundary_method == "identity":
             signal_padded = np.append(np.nan * np.ones(len(coeffs) - 1), signal)
-            signal_smoothed = np.convolve(signal_padded, temp_reversed_coeffs, mode="valid")
+            signal_smoothed = np.convolve(
+                signal_padded, temp_reversed_coeffs, mode="valid"
+            )
             for ix in range(len(coeffs)):
                 signal_smoothed[ix] = signal[ix]
             return signal_smoothed
         elif boundary_method == "nan":
             signal_padded = np.append(np.nan * np.ones(len(coeffs) - 1), signal)
-            signal_smoothed = np.convolve(signal_padded, temp_reversed_coeffs, mode="valid")
+            signal_smoothed = np.convolve(
+                signal_padded, temp_reversed_coeffs, mode="valid"
+            )
             return signal_smoothed
         else:
             raise ValueError("Unknown boundary method.")
