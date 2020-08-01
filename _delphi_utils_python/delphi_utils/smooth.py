@@ -13,10 +13,6 @@ docstrings for details.
 import numpy as np
 import pandas as pd
 
-# from .config import Config
-
-GAUSSIAN_BANDWIDTH = 10
-
 
 class Smoother:
     """
@@ -57,7 +53,7 @@ class Smoother:
         self,
         method_name="savgol",
         window_length=14,
-        gaussian_bandwidth=GAUSSIAN_BANDWIDTH,
+        gaussian_bandwidth=100,
         impute=True,
         minval=None,
         poly_fit_degree=3,
@@ -129,7 +125,7 @@ class Smoother:
     def left_gauss_linear_smoother(
         self,
         signal: np.ndarray,
-        gaussian_bandwidth=GAUSSIAN_BANDWIDTH,
+        gaussian_bandwidth=10,
         impute=False,
         minval=None,
     ) -> np.ndarray:
