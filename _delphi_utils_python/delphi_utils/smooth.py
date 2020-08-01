@@ -27,15 +27,15 @@ class Smoother:
         * 'local_linear' or a Gaussian-weight linear regression smoother
         * 'moving_average' or a moving window average smoother
     window_length: int
-        The length of the averaging window for 'savgol' and 'moving_average'. 
-        This value is in the units of the data, which in Delphi tends to be days. 
-        Two weeks has been a reasonable smoothing default.
+        The length of the averaging window for 'savgol' and 'moving_average'.
+        This value is in the units of the data, which in Delphi tends to be days.
+        Three weeks appears to be a reasonable smoothing default.
     gaussian_bandwidth: float
-        If 'local_linear' is used, this is the width of the Gaussian kernel, in units 
-        of variance. Analogous to window_length for the other two methods: larger units 
+        If 'local_linear' is used, this is the width of the Gaussian kernel, in units
+        of variance. Analogous to window_length for the other two methods: larger units
         put more weight on the past.
     impute: bool
-        If True, will fill nan values before smoothing. Currently uses 'savgol' method 
+        If True, will fill nan values before smoothing. Currently uses 'savgol' method
         for imputation.
     minval: float or None
         The smallest value to allow in a signal. If None, there is no smallest value.
@@ -52,12 +52,13 @@ class Smoother:
     def __init__(
         self,
         method_name="savgol",
-        window_length=14,
+        window_length=21,
         gaussian_bandwidth=100,
         impute=True,
         minval=None,
         poly_fit_degree=3,
         boundary_method="identity",
+        savgol_weighted=False,
     ):
         self.method_name = method_name
         self.window_length = window_length
@@ -66,9 +67,14 @@ class Smoother:
         self.minval = minval
         self.poly_fit_degree = poly_fit_degree
         self.boundary_method = boundary_method
+        self.savgol_weighted = savgol_weighted
         if method_name == "savgol":
             self.coeffs = self.causal_savgol_coeffs(
-                -self.window_length + 1, 0, self.poly_fit_degree
+                -self.window_length + 1,
+                0,
+                self.poly_fit_degree,
+                self.savgol_weighted,
+                self.gaussian_bandwidth,
             )
         else:
             self.coeffs = None
@@ -101,7 +107,7 @@ class Smoother:
             return signal_smoothed
 
     def moving_average_smoother(
-        self, signal: np.ndarray, window_length=14
+        self, signal: np.ndarray, window_length=21
     ) -> np.ndarray:
         """
         Compute a moving average on signal.
@@ -171,7 +177,9 @@ class Smoother:
             signal_smoothed[signal_smoothed <= minval] = minval
         return signal_smoothed
 
-    def causal_savgol_coeffs(self, nl, nr, poly_fit_degree):
+    def causal_savgol_coeffs(
+        self, nl, nr, poly_fit_degree, weighted=False, gaussian_bandwidth=10
+    ):
         """
         Solves for the Savitzky-Golay coefficients. The coefficients c_i
         give a filter so that
@@ -206,7 +214,12 @@ class Smoother:
         A = np.vstack(
             [np.arange(nl, nr + 1) ** j for j in range(poly_fit_degree + 1)]
         ).T
-        mat_inverse = np.linalg.inv(A.T @ A) @ A.T
+        # TODO: needs testing
+        if weighted:
+            weights = np.exp(-((np.arange(nl, nr + 1)) ** 2) / gaussian_bandwidth)
+            mat_inverse = np.linalg.inv((A.T * weights) @ A) @ (A.T * weights)
+        else:
+            mat_inverse = np.linalg.inv(A.T @ A) @ A.T
         window_length = nr - nl + 1
         basis_vector = np.zeros(window_length)
         coeffs = np.zeros(window_length)
