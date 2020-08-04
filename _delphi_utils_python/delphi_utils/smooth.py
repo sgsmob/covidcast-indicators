@@ -57,7 +57,7 @@ class Smoother:
         impute=True,
         minval=None,
         poly_fit_degree=3,
-        boundary_method="identity",
+        boundary_method="shortened_window",
         savgol_weighted=False,
     ):
         self.method_name = method_name
@@ -135,7 +135,7 @@ class Smoother:
         return signal_smoothed
 
     def left_gauss_linear_smoother(
-        self, signal: np.ndarray, gaussian_bandwidth=10, impute=False, minval=None,
+        self, signal: np.ndarray, gaussian_bandwidth=100, impute=False, minval=None,
     ) -> np.ndarray:
         """
         Smooth the y-values using a local linear regression with Gaussian weights.
@@ -143,8 +143,7 @@ class Smoother:
         At each time t, we use the data from times 1, ..., t-dt, weighted
         using the Gaussian kernel, to produce the estimate at time t.
 
-        For math details, see the smoothing_docs folder. TL;DR: the A matrix in the 
-        code below is the design matrix of the regression.
+        For math details, see the smoothing_docs folder.
 
         Parameters
         ----------
@@ -161,7 +160,7 @@ class Smoother:
         """
         n = len(signal)
         signal_smoothed = np.zeros_like(signal)
-        A = np.vstack([np.ones(n), np.arange(n)]).T
+        A = np.vstack([np.ones(n), np.arange(n)]).T  # the regression design matrix
         for idx in range(n):
             weights = np.exp(-((np.arange(idx + 1) - idx) ** 2) / gaussian_bandwidth)
             AwA = np.dot(A[: (idx + 1), :].T * weights, A[: (idx + 1), :])
@@ -178,7 +177,7 @@ class Smoother:
         return signal_smoothed
 
     def causal_savgol_coeffs(
-        self, nl, nr, poly_fit_degree, weighted=False, gaussian_bandwidth=10
+        self, nl, nr, poly_fit_degree, weighted=False, gaussian_bandwidth=100
     ):
         """
         Solves for the Savitzky-Golay coefficients. The coefficients c_i
@@ -229,7 +228,7 @@ class Smoother:
             coeffs[i] = (mat_inverse @ basis_vector)[0]
         return coeffs
 
-    def pad_and_convolve(self, signal, coeffs, boundary_method="identity"):
+    def pad_and_convolve(self, signal, coeffs, boundary_method="shortened_window"):
         """
         Returns a specific type of convolution of the 1D signal with the 1D signal
         coeffs, respecting boundary effects. That is, the output y is
@@ -258,19 +257,38 @@ class Smoother:
 
         # reverse because np.convolve reverses the second argument
         temp_reversed_coeffs = np.array(list(reversed(coeffs)))
+
+        signal_padded = np.append(np.nan * np.ones(len(coeffs) - 1), signal)
+        signal_smoothed = np.convolve(signal_padded, temp_reversed_coeffs, mode="valid")
+
+        # this section handles the smoothing behavior at the (left) boundary:
+        # - identity keeps the original signal (doesn't smooth)
+        # - shortened_window applies savgol with a smaller window to do the fit
+        # - nan writes nans
         if boundary_method == "identity":
-            signal_padded = np.append(np.nan * np.ones(len(coeffs) - 1), signal)
-            signal_smoothed = np.convolve(
-                signal_padded, temp_reversed_coeffs, mode="valid"
-            )
             for ix in range(len(coeffs)):
                 signal_smoothed[ix] = signal[ix]
             return signal_smoothed
+        elif boundary_method == "shortened_window":
+            for ix in range(len(coeffs)):
+                if ix == 0:
+                    signal_smoothed[ix] = signal[ix]
+                else:
+                    try:
+                        ix_coeffs = self.causal_savgol_coeffs(
+                            -ix,
+                            0,
+                            self.poly_fit_degree,
+                            weighted=self.savgol_weighted,
+                            gaussian_bandwidth=self.gaussian_bandwidth,
+                        )
+                        signal_smoothed[ix] = ix_coeffs @ signal[: (ix + 1)]
+                    except (
+                        np.linalg.LinAlgError,  # for small ix, the design matrix is singular
+                    ):
+                        signal_smoothed[ix] = signal[ix]
+            return signal_smoothed
         elif boundary_method == "nan":
-            signal_padded = np.append(np.nan * np.ones(len(coeffs) - 1), signal)
-            signal_smoothed = np.convolve(
-                signal_padded, temp_reversed_coeffs, mode="valid"
-            )
             return signal_smoothed
         else:
             raise ValueError("Unknown boundary method.")
