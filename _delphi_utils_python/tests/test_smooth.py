@@ -88,6 +88,23 @@ class TestSmoothers:
         smoothed_X = smoother.smooth(X)
         assert np.allclose(X[window_length - 1 :], smoothed_X[window_length - 1 :])
 
+        # The savgol method should match the linear regression method on the first
+        # window_length-many values of the signal, if the savgol_weighting is set to true,
+        # and the polynomial fit degree is set to 1.
+        window_length = 20
+        signal = np.arange(window_length) + np.random.randn(window_length)
+        smoother = Smoother(method_name="local_linear")
+        smoothed_signal1 = smoother.smooth(signal)
+        smoother = Smoother(
+            method_name="savgol",
+            window_length=window_length,
+            savgol_weighted=True,
+            poly_fit_degree=1,
+        )
+        smoothed_signal2 = smoother.smooth(signal)
+
+        assert np.allclose(smoothed_signal1, smoothed_signal2)
+
     def test_impute_with_savgol(self):
         # should impute the next value in a linear progression with M>=1
         X = np.hstack([np.arange(10), [np.nan], np.arange(10)])
