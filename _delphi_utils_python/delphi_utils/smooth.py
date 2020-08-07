@@ -18,10 +18,10 @@ import pandas as pd
 
 class Smoother:
     """
-    This is the smoothing utility class. It handles imputation and smoothing. 
-    Reasonable defaults are given for all the parameters, but fine-grained 
+    This is the smoothing utility class. It handles imputation and smoothing.
+    Reasonable defaults are given for all the parameters, but fine-grained
     control is exposed.
-    
+
     Instantiating a smoother class specifies a smoother with a host of parameters,
     which can then be applied to an np.ndarray with the function smooth:
     > smoother = Smoother(method_name='savgol', window_length=28, gaussian_bandwidth=100)
@@ -51,8 +51,6 @@ class Smoother:
         28                       579
         35	                     905
         42	                     1303
-        49	                     1774
-        56	                     2318
     impute: bool
         If True, will fill nan values before smoothing. Currently uses the 'savgol' method
         for imputation.
@@ -72,8 +70,8 @@ class Smoother:
         self,
         method_name="savgol",
         poly_fit_degree=2,
-        window_length=42,
-        gaussian_bandwidth=325,  # corresponds to 95% weight on first 3 weeks
+        window_length=28,
+        gaussian_bandwidth=144,  # a ~2 week window
         impute=True,
         minval=None,
         boundary_method="shortened_window",
@@ -127,17 +125,17 @@ class Smoother:
 
     def moving_average_smoother(self, signal):
         """
-        Compute a moving average on signal.
+        Computes a moving average on the signal.
 
         Parameters
         ----------
         signal: np.ndarray
-            Input array
+            Input array.
 
         Returns
         -------
         signal_smoothed: np.ndarray
-            An array with the same length as arr, but the first window_length-1 
+            An array with the same length as arr, but the first window_length-1
             entries are np.nan.
         """
         if not isinstance(self.window_length, int):
