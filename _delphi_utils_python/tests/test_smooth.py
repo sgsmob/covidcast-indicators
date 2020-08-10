@@ -13,6 +13,10 @@ from delphi_utils import Smoother
 
 
 class TestSmoothers:
+    def test_identity_smoother(self):
+        signal = np.arange(30) + np.random.rand(30)
+        assert np.allclose(signal, Smoother(method_name="identity").smooth(signal))
+
     def test_moving_average_smoother(self):
         # The raw and smoothed lengths should match
         signal = np.ones(30)

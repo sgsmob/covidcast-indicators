@@ -44,13 +44,13 @@ class Smoother:
         half the gaussian_bandwidth. If None, performs unweighted regression. (Applies
         to 'left_gauss_linear' and 'savgol'.)
         Here are some reference values:
-        time window (days)   |   bandwidth
-        7	                     36
-        14	                     144
-        21	                     325
+        time window    |     bandwidth
+        7                        36
+        14                       144
+        21                       325
         28                       579
-        35	                     905
-        42	                     1303
+        35                       905
+        42                       1303
     impute: bool
         If True, will fill nan values before smoothing. Currently uses the 'savgol' method
         for imputation.
@@ -93,7 +93,7 @@ class Smoother:
         else:
             self.coeffs = None
 
-        METHODS = {"savgol", "left_gauss_linear", "moving_average"}
+        METHODS = {"savgol", "left_gauss_linear", "moving_average", "identity"}
 
         if self.method_name not in METHODS:
             raise ValueError("Invalid method name given.")
@@ -120,6 +120,8 @@ class Smoother:
             signal_smoothed = self.left_gauss_linear_smoother(signal)
         elif self.method_name == "moving_average":
             signal_smoothed = self.moving_average_smoother(signal)
+        elif self.method_name == "identity":
+            signal_smoothed = signal
 
         return signal_smoothed
 
