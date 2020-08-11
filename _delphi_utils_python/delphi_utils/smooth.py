@@ -24,17 +24,18 @@ class Smoother:
 
     Instantiating a smoother class specifies a smoother with a host of parameters,
     which can then be applied to an np.ndarray with the function smooth:
-    > smoother = Smoother(method_name='savgol', window_length=28, gaussian_bandwidth=100)
+    > smoother = Smoother(smoother_name='savgol', window_length=28, gaussian_bandwidth=144)
     > smoothed_signal = smoother.smooth(signal)
 
     Parameters
     ----------
-    method_name: {'savgol', 'left_gauss_linear', 'moving_average'}
-        This variable specifies the smoothing method. We have three methods, currently:
-        * 'savgol' or a Savtizky-Golay smoother
+    smoother_name: {'savgol', 'left_gauss_linear', 'moving_average', 'identity'}
+        This variable specifies the smoother. We have four smoothers, currently:
+        * 'savgol' or a Savtizky-Golay smoother (default)
         * 'left_gauss_linear' or a Gaussian-weight linear regression smoother
         * 'moving_average' or a moving window average smoother
-        Descriptions of the methods are available in the doc strings. Full details are
+        * 'identity' or the trivial smoother (no smoothing)
+        Descriptions of the smoothers are available in the doc strings. Full details are
         in: https://github.com/cmu-delphi/covidcast-modeling/indicators_smoother.
     window_length: int
         The length of the averaging window for 'savgol' and 'moving_average'.
@@ -51,39 +52,40 @@ class Smoother:
         28                       579
         35                       905
         42                       1303
-    impute: bool
-        If True, will fill nan values before smoothing. Currently uses the 'savgol' method
-        for imputation.
+    impute: {'savgol', 'zeros', None}
+        If 'savgol' (default), will fill nan values with a savgol fit on the largest available time 
+        window prior (up to window_length). If 'zeros', will fill nan values with zeros. 
+        If None, leaves the nans in place.
     minval: float or None
         The smallest value to allow in a signal. If None, there is no smallest value.
         Currently only implemented for 'left_gauss_linear'.
     poly_fit_degree: int
-        A parameter for the 'savgol' method which sets the degree of the polynomial fit.
+        A parameter for the 'savgol' smoother which sets the degree of the polynomial fit.
 
     Methods
     ----------
     smooth: np.ndarray
-        Takes a 1D signal and returns a smoothed version.
+        Takes a 1D signal and returns a smoothed version. Both arrays have the same length.
     """
 
     def __init__(
         self,
-        method_name="savgol",
+        smoother_name="savgol",
         poly_fit_degree=2,
         window_length=28,
         gaussian_bandwidth=144,  # a ~2 week window
-        impute=True,
+        impute_method="savgol",
         minval=None,
         boundary_method="shortened_window",
     ):
-        self.method_name = method_name
+        self.smoother_name = smoother_name
         self.poly_fit_degree = poly_fit_degree
         self.window_length = window_length
         self.gaussian_bandwidth = gaussian_bandwidth
-        self.impute = impute
+        self.impute_method = impute_method
         self.minval = minval
         self.boundary_method = boundary_method
-        if method_name == "savgol":
+        if smoother_name == "savgol":
             self.coeffs = self.savgol_coeffs(
                 -self.window_length + 1,
                 0,
@@ -93,15 +95,20 @@ class Smoother:
         else:
             self.coeffs = None
 
-        METHODS = {"savgol", "left_gauss_linear", "moving_average", "identity"}
+        SMOOTHERS = {"savgol", "left_gauss_linear", "moving_average", "identity"}
 
-        if self.method_name not in METHODS:
-            raise ValueError("Invalid method name given.")
+        if self.smoother_name not in SMOOTHERS:
+            raise ValueError("Invalid smoother name given.")
+
+        IMPUTE_METHODS = {"savgol", "zeros", None}
+
+        if self.impute_method not in IMPUTE_METHODS:
+            raise ValueError("Invalid impute method given.")
 
     def smooth(self, signal):
         """
         The major workhorse smoothing function. Can use one of three smoothing
-        methods, as specified by the class variable method_name.
+        methods, as specified by the class variable smoother_name.
 
         Parameters
         ----------
@@ -111,19 +118,41 @@ class Smoother:
         signal_smoothed: np.ndarray
             A smoothed 1D signal.
         """
-        if self.impute:
-            signal = self.savgol_impute(signal)
+        signal = self.impute(signal)
 
-        if self.method_name == "savgol":
+        if self.smoother_name == "savgol":
             signal_smoothed = self.savgol_smoother(signal)
-        elif self.method_name == "left_gauss_linear":
+        elif self.smoother_name == "left_gauss_linear":
             signal_smoothed = self.left_gauss_linear_smoother(signal)
-        elif self.method_name == "moving_average":
+        elif self.smoother_name == "moving_average":
             signal_smoothed = self.moving_average_smoother(signal)
-        elif self.method_name == "identity":
+        elif self.smoother_name == "identity":
             signal_smoothed = signal
 
         return signal_smoothed
+
+    def impute(self, signal):
+        """
+        Imputes the nan values in the signal.
+
+        Parameters
+        ----------
+        signal: np.ndarray
+            1D signal to be imputed.
+
+        Returns
+        -------
+        imputed_signal: np.ndarray
+            Imputed signal.
+        """
+        if self.impute_method == "savgol":
+            imputed_signal = self.savgol_impute(signal)
+        elif self.impute_method == "zeros":
+            imputed_signal = np.nan_to_num(signal)
+        elif self.impute_method is None:
+            imputed_signal = np.copy(signal)
+
+        return imputed_signal
 
     def moving_average_smoother(self, signal):
         """
@@ -322,10 +351,19 @@ class Smoother:
 
     def savgol_impute(self, signal):
         """
-        This method looks through the signal, finds the nan values, and imputes them
-        using an M-degree polynomial fit on the previous window_length data points.
-        The boundary cases, i.e. nans within wl of the start of the array
-        are imputed with a window length shrunk to the data available.
+        This method fills the nan values in the signal with an M-degree polynomial fit
+        on a rolling window of the immediate past up to window_length data points.
+
+        In the case of a single data point in the past, the single data point is
+        continued. In the case of no data points in the past (i.e. the signal starts
+        with nan), an error is raised.
+
+        Note that in the case of many adjacent nans, the method will use previously
+        imputed values to do the fitting for later values. E.g. for
+        >>> x = np.array([1.0, 2.0, np.nan, 1.0, np.nan])
+        the last np.nan will be fit on np.array([1.0, 2.0, *, 1.0]), where * is the
+        result of imputing based on np.array([1.0, 2.0]) (depends on the savgol
+        settings).
 
         Parameters
         ----------
@@ -342,17 +380,13 @@ class Smoother:
             raise ValueError("The signal should not begin with a nan value.")
         for ix in np.where(np.isnan(signal))[0]:
             if ix < self.window_length:
-                if ix == 0:
-                    signal_imputed[ix] = signal[ix]
-                elif ix == 1:
-                    signal_imputed[ix] = (
-                        signal[ix] if not np.isnan(signal[ix]) else signal[0]
-                    )
+                if ix == 1:
+                    signal_imputed[ix] = signal_imputed[0]
                 else:
                     coeffs = self.savgol_coeffs(
                         -ix, -1, self.poly_fit_degree, self.gaussian_bandwidth
                     )
-                    signal_imputed[ix] = signal[:ix] @ coeffs
+                    signal_imputed[ix] = signal_imputed[:ix] @ coeffs
             else:
                 coeffs = self.savgol_coeffs(
                     -self.window_length,
@@ -360,7 +394,7 @@ class Smoother:
                     self.poly_fit_degree,
                     self.gaussian_bandwidth,
                 )
-                signal_imputed[ix] = signal[ix - self.window_length : ix] @ coeffs
+                signal_imputed[ix] = signal_imputed[ix - self.window_length : ix] @ coeffs
         return signal_imputed
 
 
