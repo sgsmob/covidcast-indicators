@@ -78,15 +78,20 @@ def pull_cds_data(base_url: str, metric: str, level: str,
     )
     df["cumulative_counts"] = pd.to_numeric(df['cumulative_counts'], errors='coerce')
 
-    # Get fips code
-    df = df.merge(PULL_MAPPING[level], on="name", how="inner")
+    # Get data for US only
+    df = df[df["country"] == "United States"]
+
+    # Change the level of unassigned cases to county
+    # Filter the data with a specific level and non-NAN values
+    df.loc[["Unassigned" in x for x in df["name"]], "level"] = "county"
     df = df[
         (
-            (df["country"] == "United States")  # US only
-            & (df["level"] == level) # county level only
+            (df["level"] == level) # county level only
             & (~np.isnan(df["cumulative_counts"]))
         )
     ]
+    # Convert CDS names to fips codes
+    df = df.merge(PULL_MAPPING[level], on="name", how="inner")
     # Fill na with forward filling
     df = df.set_index("fips").groupby("fips").ffill().reset_index()
 
