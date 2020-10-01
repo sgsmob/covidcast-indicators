@@ -122,11 +122,6 @@ def run_module():
             # Aggregate to appropriate geographic resolution
             df = geo_map(pulled_df[metric][used_geo_res], geo_res, map_df)
             df["val"] = SMOOTHERS_MAP[smoother][0](df[sensor].values)
-            if sensor == "new_counts":
-                if metric == "tested":
-                    tested_df = df.copy()
-                else:
-                    positive_df = df.copy()
             df["se"] = np.nan
             df["sample_size"] = np.nan
             # Drop early entries where data insufficient for smoothing
@@ -144,39 +139,3 @@ def run_module():
                 geo_res=geo_res,
                 sensor=sensor_name,
             )
-
-        # For positivity rate
-        print(geo_res, "pct_positive", smoother)
-        df = pd.merge(tested_df, positive_df,
-                      on=["geo_id", "timestamp"],
-                      suffixes=('_tested', '_confirmed'),
-                      how="inner")[["geo_id", "timestamp",
-                                      "val_tested", "val_confirmed"]]
-        df = df.loc[
-            (df["val_tested"] >= MIN_OBS) # threshold
-            & (df["val_confirmed"] >= 0)
-            & (df["val_confirmed"] <= df["val_tested"])
-        ]
-        df["val"] = df["val_confirmed"] / df["val_tested"] * 100
-        df["sample_size"] = df["val_tested"]
-
-        # Calculate Standard Error
-        df.loc[df["sample_size"] == 0, "se"] = 0
-        df.loc[df["sample_size"] > 0, "se"] = np.sqrt(
-            df["val"]/100 * (1-df["val"]/100) / df["sample_size"]) * 100
-
-        if smoother == "unsmoothed":
-            metric = "wip_raw"
-        else:
-            metric = "wip_smoothed"
-        sensor_name = SMOOTHERS_MAP[smoother][1] + sensor_name
-        create_export_csv(
-            df,
-            export_dir=export_dir,
-            start_date=datetime.strptime(
-                    export_start_dates["tested"], "%Y-%m-%d"),
-            metric=metric,
-            geo_res=geo_res,
-            sensor="pct_positive",
-        )
-  
