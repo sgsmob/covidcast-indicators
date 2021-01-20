@@ -3,13 +3,12 @@
 import pandas as pd
 from delphi_utils import GeoMapper
 
-VALID_GEO_RES = ("county", "state", "msa", "hrr")
+VALID_GEO_RES = ("county", "state", "msa", "hrr", "hhs", "nation")
 INCIDENCE_BASE = 100000
 
 def geo_map(df: pd.DataFrame, geo_res: str):
     """
-    Maps a DataFrame df, which contains data at the county resolution, and
-    aggregate it to the geographic resolution geo_res.
+    Map and aggregate a DataFrame at the county resolution to the geographic resolution geo_res.
 
     Parameters
     ----------
@@ -17,7 +16,7 @@ def geo_map(df: pd.DataFrame, geo_res: str):
         Columns: fips, timestamp, new_counts, cumulative_counts, population ...
     geo_res: str
         Geographic resolution to which to aggregate.  Valid options:
-        ('fips', 'state', 'msa', 'hrr').
+        ('fips', 'state', 'msa', 'hrr', 'hhs', 'nation').
     sensor: str
         sensor type. Valid options:
         ("new_counts", "cumulative_counts",
